@@ -27,11 +27,12 @@ import (
 
 var (
 	// main operation modes
-	list    = flag.Bool("l", false, "list files whose formatting differs from goimport's")
-	write   = flag.Bool("w", false, "write result to (source) file instead of stdout")
-	doDiff  = flag.Bool("d", false, "display diffs instead of rewriting files")
-	srcdir  = flag.String("srcdir", "", "choose imports as if source code is from `dir`. When operating on a single file, dir may instead be the complete file name.")
-	verbose = flag.Bool("v", false, "verbose logging")
+	list       = flag.Bool("l", false, "list files whose formatting differs from goimport's")
+	write      = flag.Bool("w", false, "write result to (source) file instead of stdout")
+	doDiff     = flag.Bool("d", false, "display diffs instead of rewriting files")
+	retainCRLF = flag.Bool("retainCRLF", false, "do not modify line break to LF if it is CRLF")
+	srcdir     = flag.String("srcdir", "", "choose imports as if source code is from `dir`. When operating on a single file, dir may instead be the complete file name.")
+	verbose    = flag.Bool("v", false, "verbose logging")
 
 	cpuProfile     = flag.String("cpuprofile", "", "CPU profile output")
 	memProfile     = flag.String("memprofile", "", "memory profile output")
@@ -138,6 +139,10 @@ func processFile(filename string, in io.Reader, out io.Writer, argType argumentT
 	res, err := imports.Process(target, src, opt)
 	if err != nil {
 		return err
+	}
+
+	if *retainCRLF && lineBreakIsCRLF(src) {
+		res = convertLFToCRLF(res)
 	}
 
 	if !bytes.Equal(src, res) {
@@ -316,4 +321,25 @@ func isFile(name string) bool {
 func isDir(name string) bool {
 	fi, err := os.Stat(name)
 	return err == nil && fi.IsDir()
+}
+
+// linBreakIsCRLF reports whether file use CRLF use line breaks, not consider MacOS(use CR as line breaks)
+func lineBreakIsCRLF(src []byte) bool {
+	for _, b := range src {
+		if b == '\r' {
+			return true
+		}
+	}
+	return false
+}
+
+func convertLFToCRLF(src []byte) []byte {
+	dst := make([]byte, 0, len(src))
+	for _, b := range src {
+		if b == '\n' {
+			dst = append(dst, '\r')
+		}
+		dst = append(dst, b)
+	}
+	return dst
 }
